@@ -70,34 +70,35 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y upx-ucl
 
-      - name: Build Web GUI assets & Compile Syncthing
-        env:
-          GOOS: ${{ matrix.jobs.goos }}
-          GOARCH: ${{ matrix.jobs.goarch }}
-          GOARM: ${{ matrix.jobs.goarm }}
-          CGO_ENABLED: "1"
-          CC: ${{ matrix.jobs.cc }}
-          EXTRA_LDFLAGS: "-linkmode=external -extldflags=-static"
+      - name: Build Web GUI assets
         shell: bash
         run: |
           echo "=== 1. Building Web GUI static assets ==="
-          go run build.go assets
+          # Generate GUI static assets on the host cleanly without CGO / cross-compiler interference
+          CGO_ENABLED=0 go run script/genassets.go -o lib/api/auto/gui.files.go gui
 
+      - name: Compile Syncthing binary
+        shell: bash
+        run: |
           echo "=== 2. Compiling Syncthing binary ==="
-          # Tags explanation:
-          # - noupgrade: completely remove auto-update checks, downloads, and replacement
-          # - noquic: completely remove quic-go protocol stack (saves RAM and CPU for router)
-          # - sqlite_omit_load_extension sqlite_dbstat: optimize SQLite
-          # - netgo osusergo: pure Go resolver & user management for pure static portability
-          go run build.go \
+          export GOOS="${{ matrix.jobs.goos }}"
+          export GOARCH="${{ matrix.jobs.goarch }}"
+          if [ -n "${{ matrix.jobs.goarm }}" ]; then
+            export GOARM="${{ matrix.jobs.goarm }}"
+          fi
+          export CGO_ENABLED=1
+          export CC="${{ matrix.jobs.cc }}"
+
+          # Direct go build targeting router architecture with static musl CGO
+          go build -v -trimpath \
             -tags "noupgrade noquic sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
-            -no-upgrade \
-            -goos "${{ matrix.jobs.goos }}" \
-            -goarch "${{ matrix.jobs.goarch }}" \
-            -cc "${{ matrix.jobs.cc }}" \
-            -version "${VERSION}" \
-            -build-out syncthing \
-            build syncthing
+            -ldflags "-w -s -buildid= -linkmode external -extldflags '-static' \
+              -X github.com/syncthing/syncthing/lib/build.Version=${VERSION} \
+              -X github.com/syncthing/syncthing/lib/build.Stamp=$(date +%s) \
+              -X github.com/syncthing/syncthing/lib/build.User=builder \
+              -X github.com/syncthing/syncthing/lib/build.Host=github \
+              -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,noquic,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
+            -o syncthing ./cmd/syncthing
 
           echo "=== 3. Compressing with UPX ==="
           upx --best --lzma syncthing || true
