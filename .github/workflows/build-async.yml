@@ -73,7 +73,7 @@ jobs:
           # Direct go build targeting router architecture with static musl CGO
           go build -v -trimpath \
             -tags "noupgrade noquic sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
-            -ldflags "-w -s -buildid= -linkmode=external -extldflags=-static \
+            -ldflags "-w -s -buildid= -linkmode=external -extldflags '-static -s' \
               -X github.com/syncthing/syncthing/lib/build.Version=${VERSION} \
               -X github.com/syncthing/syncthing/lib/build.Stamp=$(date +%s) \
               -X github.com/syncthing/syncthing/lib/build.User=builder \
@@ -81,7 +81,14 @@ jobs:
               -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,noquic,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
             -o syncthing ./cmd/syncthing
 
-          echo "=== 3. Packaging uncompressed binary ==="
+          echo "=== 3. Stripping CGO DWARF debug sections and symbol tables ==="
+          echo "Binary size before strip:"
+          ls -lh syncthing
+          llvm-strip --strip-all syncthing || zig objcopy --strip-all syncthing || strip --strip-all syncthing || true
+          echo "Binary size after strip:"
+          ls -lh syncthing
+
+          echo "=== 4. Packaging uncompressed binary ==="
           OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}-${VERSION}"
           mv syncthing "${OUT_NAME}"
           ls -lh "${OUT_NAME}"
