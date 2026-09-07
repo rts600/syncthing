@@ -284,8 +284,8 @@ func (a *App) startup() error {
 	a.mainService.Add(connectionsService)
 
 	a.cfg.Modify(func(cfg *config.Configuration) {
-		// Candidate builds always run with usage reporting.
-		if build.IsCandidate {
+		// Candidate builds always run with usage reporting unless explicitly disabled (< 0).
+		if build.IsCandidate && cfg.Options.URAccepted >= 0 {
 			slog.Info("Anonymous usage reporting is always enabled for candidate releases")
 			if cfg.Options.URAccepted != ur.Version {
 				cfg.Options.URAccepted = ur.Version
@@ -458,7 +458,7 @@ func printServiceTree(w io.Writer, sup supervisor, level int) {
 	}
 }
 
-func printService(w io.Writer, svc any, level int) {
+func printService(w io.Writer, svc interface{}, level int) {
 	type errorer interface{ Error() error }
 
 	t := "-"
