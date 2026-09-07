@@ -1,0 +1,145 @@
+name: Build Syncthing with QUIC
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag version to release (e.g. v2.1.3)"
+        required: false
+        default: "v2.1.3"
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.jobs.output }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        jobs:
+          - { goos: linux, goarch: arm64, output: arm64, cc: "zig cc -target aarch64-linux-musl" }
+          - { goos: linux, goarch: arm, goarm: '7', output: armv7, cc: "zig cc -target arm-linux-musleabihf -mcpu=generic+v7a" }
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '~1.26.0'
+          cache: true
+
+      - name: Set up Zig (CGO Cross Compiler)
+        uses: mlugg/setup-zig@v2
+
+      - name: Set version variables
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ] || [ -z "$VERSION" ]; then
+            VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "v2.1.3-custom")
+          fi
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Building Syncthing version: ${VERSION}"
+
+      - name: Install Official UPX
+        run: |
+          echo "Downloading official UPX release from github.com/upx/upx..."
+          curl -sL https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz | tar -xJ --strip-components=1 -C /usr/local/bin upx-4.2.4-amd64_linux/upx
+          upx --version
+
+      - name: Build Web GUI assets
+        shell: bash
+        run: |
+          echo "=== 1. Building Web GUI static assets ==="
+          # Generate GUI static assets on the host cleanly without CGO / cross-compiler interference
+          CGO_ENABLED=0 go run script/genassets.go -o lib/api/auto/gui.files.go gui
+
+      - name: Compile Syncthing binary
+        shell: bash
+        run: |
+          echo "=== 2. Compiling Syncthing binary ==="
+          export GOOS="${{ matrix.jobs.goos }}"
+          export GOARCH="${{ matrix.jobs.goarch }}"
+          if [ -n "${{ matrix.jobs.goarm }}" ]; then
+            export GOARM="${{ matrix.jobs.goarm }}"
+          fi
+          export CGO_ENABLED=1
+          export CC="${{ matrix.jobs.cc }}"
+
+          # Direct go build targeting router architecture with static musl CGO (QUIC retained)
+          go build -v -trimpath \
+            -tags "noupgrade sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
+            -ldflags "-w -s -buildid= -linkmode=external -extldflags '-static -s' \
+              -X github.com/syncthing/syncthing/lib/build.Version=${VERSION} \
+              -X github.com/syncthing/syncthing/lib/build.Stamp=$(date +%s) \
+              -X github.com/syncthing/syncthing/lib/build.User=builder \
+              -X github.com/syncthing/syncthing/lib/build.Host=github \
+              -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
+            -o syncthing ./cmd/syncthing
+
+          echo "=== 3. Stripping CGO DWARF debug sections and symbol tables ==="
+          echo "Binary size before strip:"
+          ls -lh syncthing
+          llvm-strip --strip-all syncthing || zig objcopy --strip-all syncthing || strip --strip-all syncthing || true
+          echo "Binary size after strip:"
+          ls -lh syncthing
+
+          echo "=== 4. Compressing with Official UPX LZMA ==="
+          upx --best --lzma -v syncthing
+          echo "Binary size after UPX compression:"
+          ls -lh syncthing
+
+          echo "=== 5. Packaging UPX binary ==="
+          OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
+          mv syncthing "${OUT_NAME}"
+          ls -lh "${OUT_NAME}"
+
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: "syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
+          path: |
+            syncthing-*
+
+  Release:
+    name: Create GitHub Release
+    permissions: write-all
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: bin/
+          merge-multiple: true
+
+      - name: Set Release Tag
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.version }}"
+          if [ -z "$TAG" ]; then
+            TAG="v2.1.3"
+          fi
+          echo "TAG_NAME=${TAG}" >> $GITHUB_ENV
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          body: ""
+          generate_release_notes: false
+          files: bin/*
+          draft: false
+          prerelease: false
+
