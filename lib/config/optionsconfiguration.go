@@ -36,13 +36,13 @@ type OptionsConfiguration struct {
 	NATLeaseM                   int      `json:"natLeaseMinutes" xml:"natLeaseMinutes" default:"60"`
 	NATRenewalM                 int      `json:"natRenewalMinutes" xml:"natRenewalMinutes" default:"30"`
 	NATTimeoutS                 int      `json:"natTimeoutSeconds" xml:"natTimeoutSeconds" default:"10"`
-	URAccepted                  int      `json:"urAccepted" xml:"urAccepted"`
+	URAccepted                  int      `json:"urAccepted" xml:"urAccepted" default:"-1"`
 	URSeen                      int      `json:"urSeen" xml:"urSeen"`
 	URUniqueID                  string   `json:"urUniqueId" xml:"urUniqueID"`
 	URURL                       string   `json:"urURL" xml:"urURL" default:"https://data.syncthing.net/newdata"`
 	URPostInsecurely            bool     `json:"urPostInsecurely" xml:"urPostInsecurely" default:"false"`
 	URInitialDelayS             int      `json:"urInitialDelayS" xml:"urInitialDelayS" default:"1800"`
-	AutoUpgradeIntervalH        int      `json:"autoUpgradeIntervalH" xml:"autoUpgradeIntervalH" default:"12"`
+	AutoUpgradeIntervalH        int      `json:"autoUpgradeIntervalH" xml:"autoUpgradeIntervalH" default:"0"`
 	UpgradeToPreReleases        bool     `json:"upgradeToPreReleases" xml:"upgradeToPreReleases"`
 	KeepTemporariesH            int      `json:"keepTemporariesH" xml:"keepTemporariesH" default:"24"`
 	ProgressUpdateIntervalS     int      `json:"progressUpdateIntervalS" xml:"progressUpdateIntervalS" default:"5"`
@@ -58,7 +58,7 @@ type OptionsConfiguration struct {
 	SetLowPriority              bool     `json:"setLowPriority" xml:"setLowPriority" default:"true"`
 	RawMaxFolderConcurrency     int      `json:"maxFolderConcurrency" xml:"maxFolderConcurrency"`
 	CRURL                       string   `json:"crURL" xml:"crashReportingURL" default:"https://crash.syncthing.net/newcrash"`
-	CREnabled                   bool     `json:"crashReportingEnabled" xml:"crashReportingEnabled" default:"true"`
+	CREnabled                   bool     `json:"crashReportingEnabled" xml:"crashReportingEnabled" default:"false"`
 	StunKeepaliveStartS         int      `json:"stunKeepaliveStartS" xml:"stunKeepaliveStartS" default:"180"`
 	StunKeepaliveMinS           int      `json:"stunKeepaliveMinS" xml:"stunKeepaliveMinS" default:"20"`
 	RawStunServers              []string `json:"stunServers" xml:"stunServer" default:"default"`
