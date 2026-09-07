@@ -5,6 +5,7 @@
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //go:build !noupgrade && !ios
+// +build !noupgrade,!ios
 
 package upgrade
 
@@ -15,19 +16,20 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/syncthing/syncthing/internal/slogutil"
-	"github.com/syncthing/syncthing/lib/build"
 	"github.com/syncthing/syncthing/lib/dialer"
 	"github.com/syncthing/syncthing/lib/signature"
 	"github.com/syncthing/syncthing/lib/tlsutil"
@@ -78,13 +80,13 @@ func init() {
 	osVersion = strings.TrimSpace(osVersion)
 }
 
-func upgradeClientGet(url string) (*http.Response, error) {
+func upgradeClientGet(url, version string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", build.UserAgent())
+	req.Header.Set("User-Agent", fmt.Sprintf(`syncthing %s (%s %s-%s)`, version, runtime.Version(), runtime.GOOS, runtime.GOARCH))
 	if osVersion != "" {
 		req.Header.Set("Syncthing-Os-Version", osVersion)
 	}
@@ -94,7 +96,7 @@ func upgradeClientGet(url string) (*http.Response, error) {
 // FetchLatestReleases returns the latest releases. The "current" parameter
 // is used for setting the User-Agent only.
 func FetchLatestReleases(releasesURL, current string) []Release {
-	resp, err := upgradeClientGet(releasesURL)
+	resp, err := upgradeClientGet(releasesURL, current)
 	if err != nil {
 		slog.Warn("Failed to fetch latest release information", slogutil.Error(err))
 		return nil
@@ -196,7 +198,7 @@ func upgradeTo(binary string, rel Release) error {
 	return ErrNoReleaseDownload
 }
 
-// Upgrade to the given release, saving the previous binary with a ".old" extension.
+// Upgrade to the given release, replacing the current binary directly without saving a .old copy.
 func upgradeToURL(archiveName, binary string, url string) error {
 	fname, err := readRelease(archiveName, filepath.Dir(binary), url)
 	if err != nil {
@@ -204,14 +206,9 @@ func upgradeToURL(archiveName, binary string, url string) error {
 	}
 	defer os.Remove(fname)
 
-	old := binary + ".old"
-	os.Remove(old)
-	err = os.Rename(binary, old)
-	if err != nil {
-		return err
-	}
+	// Directly remove the old binary instead of renaming to binary.old
+	_ = os.Remove(binary)
 	if err := os.Rename(fname, binary); err != nil {
-		os.Rename(old, binary)
 		return err
 	}
 	return nil
@@ -226,7 +223,6 @@ func readRelease(archiveName, dir, url string) (string, error) {
 	}
 
 	req.Header.Add("Accept", "application/octet-stream")
-	req.Header.Set("User-Agent", build.UserAgent())
 	resp, err := upgradeClient.Do(req)
 	if err != nil {
 		return "", err
