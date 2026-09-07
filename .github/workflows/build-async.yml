@@ -35,7 +35,6 @@ jobs:
       matrix:
         jobs:
           - { goos: linux, goarch: arm64, output: arm64, cc: "zig cc -target aarch64-linux-musl" }
-          - { goos: linux, goarch: arm, goarm: '5', output: armv5, cc: "zig cc -target arm-linux-musleabi -mcpu=arm1026ej_s" }
           - { goos: linux, goarch: arm, goarm: '7', output: armv7, cc: "zig cc -target arm-linux-musleabihf -mcpu=generic+v7a" }
 
     steps:
@@ -47,7 +46,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '~1.26.0'
           cache: true
 
       - name: Set up Zig (CGO Cross Compiler)
@@ -66,9 +65,11 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "Building Syncthing version: ${VERSION}"
 
-      - name: Install UPX
+      - name: Install Official UPX
         run: |
-          sudo apt-get update && sudo apt-get install -y upx-ucl
+          echo "Downloading official UPX release..."
+          curl -sL https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz | tar -xJ --strip-components=1 -C /usr/local/bin upx-4.2.4-amd64_linux/upx
+          upx --version
 
       - name: Build Web GUI assets
         shell: bash
@@ -92,7 +93,7 @@ jobs:
           # Direct go build targeting router architecture with static musl CGO
           go build -v -trimpath \
             -tags "noupgrade noquic sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
-            -ldflags "-w -s -buildid= -linkmode external -extldflags '-static' \
+            -ldflags "-w -s -buildid= -linkmode=external -extldflags=-static \
               -X github.com/syncthing/syncthing/lib/build.Version=${VERSION} \
               -X github.com/syncthing/syncthing/lib/build.Stamp=$(date +%s) \
               -X github.com/syncthing/syncthing/lib/build.User=builder \
@@ -100,8 +101,12 @@ jobs:
               -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,noquic,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
             -o syncthing ./cmd/syncthing
 
-          echo "=== 3. Compressing with UPX ==="
-          upx --best --lzma syncthing || true
+          echo "=== 3. Compressing with Official UPX LZMA ==="
+          echo "Binary size before compression:"
+          ls -lh syncthing
+          upx --best --lzma -v syncthing
+          echo "Binary size after compression:"
+          ls -lh syncthing
 
           echo "=== 4. Packaging ==="
           OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}-${VERSION}"
