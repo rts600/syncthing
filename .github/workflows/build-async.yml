@@ -51,6 +51,12 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "Building Syncthing version: ${VERSION}"
 
+      - name: Install Official UPX
+        run: |
+          echo "Downloading official UPX release from github.com/upx/upx..."
+          curl -sL https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz | tar -xJ --strip-components=1 -C /usr/local/bin upx-4.2.4-amd64_linux/upx
+          upx --version
+
       - name: Build Web GUI assets
         shell: bash
         run: |
@@ -88,8 +94,13 @@ jobs:
           echo "Binary size after strip:"
           ls -lh syncthing
 
-          echo "=== 4. Packaging uncompressed binary ==="
-          OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}-${VERSION}"
+          echo "=== 4. Compressing with Official UPX LZMA ==="
+          upx --best --lzma -v syncthing
+          echo "Binary size after UPX compression:"
+          ls -lh syncthing
+
+          echo "=== 5. Packaging UPX binary ==="
+          OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}"
           mv syncthing "${OUT_NAME}"
           ls -lh "${OUT_NAME}"
 
