@@ -86,8 +86,8 @@ jobs:
           # For Windows, embed application icon and metadata via goversioninfo
           if [ "${{ matrix.jobs.goos }}" = "windows" ]; then
             echo "=== Generating Windows Resources (Icon and Metadata) ==="
-            go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
-            export PATH="$(go env GOPATH)/bin:$PATH"
+            GOOS="" GOARCH="" CGO_ENABLED=0 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
+            GOVERSIONINFO="$(go env GOPATH)/bin/goversioninfo"
 
             CLEAN_VER="${VERSION#v}"
             IFS='.' read -r VER_MAJOR VER_MINOR VER_PATCH <<< "${CLEAN_VER%%-*}"
@@ -100,7 +100,7 @@ jobs:
               "${VER_MAJOR}" "${VER_MINOR}" "${VER_PATCH}" \
               "${CLEAN_VER}" "${CLEAN_VER}" > versioninfo.json
 
-            goversioninfo -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
+            "${GOVERSIONINFO}" -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
             rm -f versioninfo.json
           fi
 
