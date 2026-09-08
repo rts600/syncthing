@@ -27,6 +27,9 @@ func openFolderDB(folder, path string, deleteRetention time.Duration) (*folderDB
 		"journal_mode = WAL",
 		"optimize = 0x10002",
 		"auto_vacuum = INCREMENTAL",
+		"cache_size = -1000",
+		"mmap_size = 0",
+		"temp_store = FILE",
 		fmt.Sprintf("application_id = %d", applicationIDFolder),
 	}
 	schemas := []string{

@@ -21,22 +21,16 @@ import (
 )
 
 const (
-	// maxIdleConns is set so that most db operations will usually fit
-	// within one of those connections and hence use their persistent page
-	// cache. Additional connections on top of these will allocate their own
-	// page cache (same as any other), but it will be deallocated on
-	// connection close.
-	maxIdleConns = 4
+	// maxIdleConns is set to 1 for embedded systems to minimize persistent
+	// SQLite page cache held in CGO memory. Temporary connections deallocate
+	// their page cache upon closing.
+	maxIdleConns = 1
 
 	minDeleteRetention = 24 * time.Hour
 )
 
-// maxOpenConns is sized for handling spikes. The primary driver is the
-// Copiers folder option which may result in up to 2*NumCPU concurrent
-// iterations. We reserve additional space on top of this to serve
-// additional operations, some of which may be reentrant (queries within
-// iterators) without deadlock.
-var maxOpenConns = max(16, 4*runtime.NumCPU())
+// maxOpenConns is sized for embedded router concurrency while preventing memory spikes.
+var maxOpenConns = max(6, 2*runtime.NumCPU())
 
 type DB struct {
 	*baseDB
@@ -68,6 +62,9 @@ func Open(path string, opts ...Option) (*DB, error) {
 		"journal_mode = WAL",
 		"optimize = 0x10002",
 		"auto_vacuum = INCREMENTAL",
+		"cache_size = -1000",
+		"mmap_size = 0",
+		"temp_store = FILE",
 		fmt.Sprintf("application_id = %d", applicationIDMain),
 	}
 	schemas := []string{
