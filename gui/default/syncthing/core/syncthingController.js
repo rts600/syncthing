@@ -1858,7 +1858,11 @@ angular.module('syncthing.core')
             if ($scope.settingsModified()) {
                 var themeChanged = $scope.config.gui.theme !== $scope.tmpGUI.theme;
                 // Angular has issues with selects with numeric values, so we handle strings here.
-                $scope.tmpOptions.urAccepted = parseInt($scope.tmpOptions._urAcceptedStr);
+                if ($scope.tmpOptions._urAcceptedStr) {
+                    $scope.tmpOptions.urAccepted = parseInt($scope.tmpOptions._urAcceptedStr);
+                } else {
+                    $scope.tmpOptions.urAccepted = -1;
+                }
                 // Check if auto-upgrade has been enabled or disabled. This
                 // also has an effect on usage reporting, so do the check
                 // for that later.
