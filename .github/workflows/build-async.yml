@@ -86,6 +86,41 @@ jobs:
           BIN_NAME="syncthing${{ matrix.jobs.exe }}"
           OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}${{ matrix.jobs.exe }}"
 
+          # For Windows, embed application icon and metadata via goversioninfo
+          if [ "${{ matrix.jobs.goos }}" = "windows" ]; then
+            echo "=== Generating Windows Resources (Icon and Metadata) ==="
+            go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
+            export PATH="$(go env GOPATH)/bin:$PATH"
+
+            CLEAN_VER="${VERSION#v}"
+            IFS='.' read -r VER_MAJOR VER_MINOR VER_PATCH <<< "${CLEAN_VER%%-*}"
+            VER_MAJOR=${VER_MAJOR:-0}
+            VER_MINOR=${VER_MINOR:-0}
+            VER_PATCH=${VER_PATCH:-0}
+
+            cat <<EOF > versioninfo.json
+{
+  "FixedFileInfo": {
+    "FileVersion": { "Major": ${VER_MAJOR}, "Minor": ${VER_MINOR}, "Patch": ${VER_PATCH} },
+    "ProductVersion": { "Major": ${VER_MAJOR}, "Minor": ${VER_MINOR}, "Patch": ${VER_PATCH} }
+  },
+  "StringFileInfo": {
+    "CompanyName": "The Syncthing Authors",
+    "FileDescription": "Syncthing - Open Source Continuous File Synchronization",
+    "FileVersion": "${CLEAN_VER}",
+    "InternalName": "syncthing",
+    "LegalCopyright": "The Syncthing Authors",
+    "OriginalFilename": "syncthing.exe",
+    "ProductName": "Syncthing",
+    "ProductVersion": "${CLEAN_VER}"
+  },
+  "IconPath": "assets/logo.ico"
+}
+EOF
+            goversioninfo -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
+            rm -f versioninfo.json
+          fi
+
           # Direct go build targeting architecture with static CGO
           go build -v -trimpath \
             -tags "noupgrade noquic sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
@@ -97,10 +132,14 @@ jobs:
               -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,noquic,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
             -o "${BIN_NAME}" ./cmd/syncthing
 
+          rm -f cmd/syncthing/resource.syso
+
           echo "=== 3. Stripping CGO DWARF debug sections and symbol tables ==="
           echo "Binary size before strip:"
           ls -lh "${BIN_NAME}"
-          llvm-strip --strip-all "${BIN_NAME}" || zig objcopy --strip-all "${BIN_NAME}" || strip --strip-all "${BIN_NAME}" || true
+          if [ "${{ matrix.jobs.goos }}" != "windows" ]; then
+            llvm-strip --strip-all "${BIN_NAME}" || zig objcopy --strip-all "${BIN_NAME}" || strip --strip-all "${BIN_NAME}" || true
+          fi
           echo "Binary size after strip:"
           ls -lh "${BIN_NAME}"
 
