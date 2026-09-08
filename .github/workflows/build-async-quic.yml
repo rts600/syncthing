@@ -98,12 +98,16 @@ jobs:
           echo "Binary size after strip:"
           ls -lh "${BIN_NAME}"
 
-          echo "=== 4. Compressing with Official UPX LZMA ==="
-          upx --best --lzma -v "${BIN_NAME}"
-          echo "Binary size after UPX compression:"
-          ls -lh "${BIN_NAME}"
+          if [ "${{ matrix.jobs.goos }}" != "windows" ]; then
+            echo "=== 4. Compressing with Official UPX LZMA ==="
+            upx --best --lzma -v "${BIN_NAME}"
+            echo "Binary size after UPX compression:"
+            ls -lh "${BIN_NAME}"
+          else
+            echo "=== 4. Skipping UPX compression for Windows binary ==="
+          fi
 
-          echo "=== 5. Packaging UPX binary ==="
+          echo "=== 5. Packaging binary ==="
           mv "${BIN_NAME}" "${OUT_NAME}"
           ls -lh "${OUT_NAME}"
 
