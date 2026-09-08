@@ -8,6 +8,9 @@ on:
         required: false
         default: "v2.1.5"
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
@@ -38,6 +41,9 @@ jobs:
 
       - name: Set up Zig (CGO Cross Compiler)
         uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: false
 
       - name: Set version variables
         shell: bash
