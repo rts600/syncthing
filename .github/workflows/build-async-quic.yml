@@ -38,9 +38,6 @@ jobs:
 
       - name: Set up Zig (CGO Cross Compiler)
         uses: mlugg/setup-zig@v2
-        with:
-          version: "0.16.0"
-          use-cache: false
 
       - name: Set version variables
         shell: bash
@@ -83,50 +80,7 @@ jobs:
           BIN_NAME="syncthing${{ matrix.jobs.exe }}"
           OUT_NAME="syncthing-${{ matrix.jobs.goos }}-${{ matrix.jobs.output }}${{ matrix.jobs.exe }}"
 
-          # For Windows, embed application icon and metadata via goversioninfo
-          if [ "${{ matrix.jobs.goos }}" = "windows" ]; then
-            echo "=== Generating Windows Resources (Icon and Metadata) ==="
-            GOOS="" GOARCH="" CGO_ENABLED=0 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
-            GOVERSIONINFO="$(go env GOPATH)/bin/goversioninfo"
-
-            python3 -c '
-import re, json, os
-
-version = os.environ.get("VERSION", "2.1.5")
-clean_ver = version.lstrip("v")
-m = re.search(r"(\d+)\.(\d+)\.(\d+)", clean_ver)
-if m:
-    major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-else:
-    major, minor, patch = 2, 1, 5
-
-data = {
-    "FixedFileInfo": {
-        "FileVersion": {"Major": major, "Minor": minor, "Patch": patch},
-        "ProductVersion": {"Major": major, "Minor": minor, "Patch": patch}
-    },
-    "StringFileInfo": {
-        "CompanyName": "The Syncthing Authors",
-        "FileDescription": "Syncthing - Open Source Continuous File Synchronization",
-        "FileVersion": clean_ver,
-        "InternalName": "syncthing",
-        "LegalCopyright": "The Syncthing Authors",
-        "OriginalFilename": "syncthing.exe",
-        "ProductName": "Syncthing",
-        "ProductVersion": clean_ver
-    },
-    "IconPath": "assets/logo.ico"
-}
-
-with open("versioninfo.json", "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2)
-'
-
-            "${GOVERSIONINFO}" -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
-            rm -f versioninfo.json
-          fi
-
-          # Direct go build targeting architecture with static CGO
+          # Direct go build targeting router architecture with static musl CGO (QUIC retained)
           go build -v -trimpath \
             -tags "noupgrade sqlite_omit_load_extension sqlite_dbstat netgo osusergo" \
             -ldflags "-w -s -buildid= -linkmode=external -extldflags '-static -s' \
@@ -137,27 +91,19 @@ with open("versioninfo.json", "w", encoding="utf-8") as f:
               -X github.com/syncthing/syncthing/lib/build.Tags=noupgrade,sqlite_omit_load_extension,sqlite_dbstat,netgo,osusergo" \
             -o "${BIN_NAME}" ./cmd/syncthing
 
-          rm -f cmd/syncthing/resource.syso
-
           echo "=== 3. Stripping CGO DWARF debug sections and symbol tables ==="
           echo "Binary size before strip:"
           ls -lh "${BIN_NAME}"
-          if [ "${{ matrix.jobs.goos }}" != "windows" ]; then
-            llvm-strip --strip-all "${BIN_NAME}" || zig objcopy --strip-all "${BIN_NAME}" || strip --strip-all "${BIN_NAME}" || true
-          fi
+          llvm-strip --strip-all "${BIN_NAME}" || zig objcopy --strip-all "${BIN_NAME}" || strip --strip-all "${BIN_NAME}" || true
           echo "Binary size after strip:"
           ls -lh "${BIN_NAME}"
 
-          if [ "${{ matrix.jobs.goos }}" != "windows" ]; then
-            echo "=== 4. Compressing with Official UPX LZMA ==="
-            upx --best --lzma -v "${BIN_NAME}"
-            echo "Binary size after UPX compression:"
-            ls -lh "${BIN_NAME}"
-          else
-            echo "=== 4. Skipping UPX compression for Windows binary ==="
-          fi
+          echo "=== 4. Compressing with Official UPX LZMA ==="
+          upx --best --lzma -v "${BIN_NAME}"
+          echo "Binary size after UPX compression:"
+          ls -lh "${BIN_NAME}"
 
-          echo "=== 5. Packaging binary ==="
+          echo "=== 5. Packaging UPX binary ==="
           mv "${BIN_NAME}" "${OUT_NAME}"
           ls -lh "${OUT_NAME}"
 
