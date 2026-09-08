@@ -204,14 +204,9 @@ func upgradeToURL(archiveName, binary string, url string) error {
 	}
 	defer os.Remove(fname)
 
-	old := binary + ".old"
-	os.Remove(old)
-	err = os.Rename(binary, old)
-	if err != nil {
-		return err
-	}
+	// Directly remove the old binary instead of renaming to binary.old
+	_ = os.Remove(binary)
 	if err := os.Rename(fname, binary); err != nil {
-		os.Rename(old, binary)
 		return err
 	}
 	return nil
