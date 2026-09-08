@@ -89,16 +89,38 @@ jobs:
             GOOS="" GOARCH="" CGO_ENABLED=0 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.0
             GOVERSIONINFO="$(go env GOPATH)/bin/goversioninfo"
 
-            CLEAN_VER="${VERSION#v}"
-            IFS='.' read -r VER_MAJOR VER_MINOR VER_PATCH <<< "${CLEAN_VER%%-*}"
-            VER_MAJOR=${VER_MAJOR:-0}
-            VER_MINOR=${VER_MINOR:-0}
-            VER_PATCH=${VER_PATCH:-0}
+            python3 -c '
+import re, json, os
 
-            printf '{\n  "FixedFileInfo": {\n    "FileVersion": { "Major": %s, "Minor": %s, "Patch": %s },\n    "ProductVersion": { "Major": %s, "Minor": %s, "Patch": %s }\n  },\n  "StringFileInfo": {\n    "CompanyName": "The Syncthing Authors",\n    "FileDescription": "Syncthing - Open Source Continuous File Synchronization",\n    "FileVersion": "%s",\n    "InternalName": "syncthing",\n    "LegalCopyright": "The Syncthing Authors",\n    "OriginalFilename": "syncthing.exe",\n    "ProductName": "Syncthing",\n    "ProductVersion": "%s"\n  },\n  "IconPath": "assets/logo.ico"\n}\n' \
-              "${VER_MAJOR}" "${VER_MINOR}" "${VER_PATCH}" \
-              "${VER_MAJOR}" "${VER_MINOR}" "${VER_PATCH}" \
-              "${CLEAN_VER}" "${CLEAN_VER}" > versioninfo.json
+version = os.environ.get("VERSION", "2.1.5")
+clean_ver = version.lstrip("v")
+m = re.search(r"(\d+)\.(\d+)\.(\d+)", clean_ver)
+if m:
+    major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+else:
+    major, minor, patch = 2, 1, 5
+
+data = {
+    "FixedFileInfo": {
+        "FileVersion": {"Major": major, "Minor": minor, "Patch": patch},
+        "ProductVersion": {"Major": major, "Minor": minor, "Patch": patch}
+    },
+    "StringFileInfo": {
+        "CompanyName": "The Syncthing Authors",
+        "FileDescription": "Syncthing - Open Source Continuous File Synchronization",
+        "FileVersion": clean_ver,
+        "InternalName": "syncthing",
+        "LegalCopyright": "The Syncthing Authors",
+        "OriginalFilename": "syncthing.exe",
+        "ProductName": "Syncthing",
+        "ProductVersion": clean_ver
+    },
+    "IconPath": "assets/logo.ico"
+}
+
+with open("versioninfo.json", "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+'
 
             "${GOVERSIONINFO}" -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
             rm -f versioninfo.json
