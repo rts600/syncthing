@@ -8,9 +8,6 @@ on:
         required: false
         default: "v2.1.5"
 
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
-
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
@@ -42,7 +39,7 @@ jobs:
       - name: Set up Zig (CGO Cross Compiler)
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: "0.16.0"
           use-cache: false
 
       - name: Set version variables
@@ -98,25 +95,11 @@ jobs:
             VER_MINOR=${VER_MINOR:-0}
             VER_PATCH=${VER_PATCH:-0}
 
-            cat <<EOF > versioninfo.json
-{
-  "FixedFileInfo": {
-    "FileVersion": { "Major": ${VER_MAJOR}, "Minor": ${VER_MINOR}, "Patch": ${VER_PATCH} },
-    "ProductVersion": { "Major": ${VER_MAJOR}, "Minor": ${VER_MINOR}, "Patch": ${VER_PATCH} }
-  },
-  "StringFileInfo": {
-    "CompanyName": "The Syncthing Authors",
-    "FileDescription": "Syncthing - Open Source Continuous File Synchronization",
-    "FileVersion": "${CLEAN_VER}",
-    "InternalName": "syncthing",
-    "LegalCopyright": "The Syncthing Authors",
-    "OriginalFilename": "syncthing.exe",
-    "ProductName": "Syncthing",
-    "ProductVersion": "${CLEAN_VER}"
-  },
-  "IconPath": "assets/logo.ico"
-}
-EOF
+            printf '{\n  "FixedFileInfo": {\n    "FileVersion": { "Major": %s, "Minor": %s, "Patch": %s },\n    "ProductVersion": { "Major": %s, "Minor": %s, "Patch": %s }\n  },\n  "StringFileInfo": {\n    "CompanyName": "The Syncthing Authors",\n    "FileDescription": "Syncthing - Open Source Continuous File Synchronization",\n    "FileVersion": "%s",\n    "InternalName": "syncthing",\n    "LegalCopyright": "The Syncthing Authors",\n    "OriginalFilename": "syncthing.exe",\n    "ProductName": "Syncthing",\n    "ProductVersion": "%s"\n  },\n  "IconPath": "assets/logo.ico"\n}\n' \
+              "${VER_MAJOR}" "${VER_MINOR}" "${VER_PATCH}" \
+              "${VER_MAJOR}" "${VER_MINOR}" "${VER_PATCH}" \
+              "${CLEAN_VER}" "${CLEAN_VER}" > versioninfo.json
+
             goversioninfo -manifest=assets/windows/syncthing.exe.manifest -o cmd/syncthing/resource.syso -64=true -arm=false
             rm -f versioninfo.json
           fi
